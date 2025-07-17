@@ -1,10 +1,10 @@
 import { registration } from "../model/userModel.js";
 import bcrypt from "bcryptjs";
-import JWT from 'jsonwebtoken';
+import JWT from "jsonwebtoken";
 import { configDotenv } from "dotenv";
-import nodemailer from "nodemailer"
-import { fileURLToPath } from 'url';
-import path from 'path';
+import nodemailer from "nodemailer";
+import { fileURLToPath } from "url";
+import path from "path";
 import { otpModal } from "../model/otpModel.js";
 import crypto from "crypto";
 
@@ -12,9 +12,8 @@ import crypto from "crypto";
 //const __dirname = path.dirname(__filename);
 configDotenv();
 
-export const sendOtpEmail = async (emailId,otp) => {
-
-    const html = `    <div
+export const sendOtpEmail = async (emailId, otp) => {
+  const html = `    <div
   style="
     max-width: 650px;
     margin: auto;
@@ -111,158 +110,183 @@ export const sendOtpEmail = async (emailId,otp) => {
   </div>
 </div>`;
 
+  try {
+    console.log("env checking", process.env.EmailPass);
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: "support@edubukeseal.org",
+        pass: process.env.EmailPass,
+      },
+    });
 
-    try {
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: "support@edubukeseal.org",
-                pass: process.env.EmailPass,
-            },
-        });
+    // yash
+    // const transporter = nodeMailer.createTransport({
+    //   host: "smtppro.zoho.in",
+    //   port: 465,
+    //   secure: true,
+    //   auth: {
+    //     user: "career@aayaamai.com",
+    //     pass: "gSuupZwgEciQ",
+    //   },
+    // });
 
-        // const response = await fetch(resumeFile);
-        // const arrayBuffer = await response.arrayBuffer(); // Convert response to ArrayBuffer
-        // const buffer = Buffer.from(arrayBuffer); // Convert ArrayBuffer to Buffer
-        //const pdfPath = path.resolve(__dirname, "../utils/edubukConsent.pdf");
-        const info = transporter.sendMail({
-            from: '"Edubuk" <support@edubukeseal.org>',
-            to: `${emailId}`,
-            subject: "Email Verification",
-            text: "From edubuk",
-            html: html,
-        });
+    // const response = await fetch(resumeFile);
+    // const arrayBuffer = await response.arrayBuffer(); // Convert response to ArrayBuffer
+    // const buffer = Buffer.from(arrayBuffer); // Convert ArrayBuffer to Buffer
+    //const pdfPath = path.resolve(__dirname, "../utils/edubukConsent.pdf");
+    const info = await transporter.sendMail({
+      from: '"Edubuk" <support@edubukeseal.org>',
+      to: `${emailId}`,
+      subject: "Email Verification",
+      text: "From edubuk",
+      html: html,
+    });
 
-
-        return { success: true, info };
-    } catch (error) {
-        console.log("ERROR:WHILE SENDING MAIL", error);
-        return { success: false, error };
-    }
+    return { success: true, info };
+  } catch (error) {
+    console.log("ERROR:WHILE SENDING MAIL", error);
+    return { success: false, error };
+  }
 };
 
-export const sendOtp = async(req,res)=>{
-    const {email}= req.body;
-    try {
-        if (!email) return res.status(400).json({ message: "Email is required" });
-        const otp = crypto.randomInt(100000,999999).toString(); // 6-digit otp
-        sendOtpEmail(email,otp);
-        await otpModal.findOneAndUpdate(
-            {email},
-            {otp,createdAt:new Date()},
-            {upsert:true,new:true}
-        )
-        res.status(200).json({ 
-            success:true,
-            message: "OTP sent successfully" });
-    } catch (error) {
-        console.log("error while sending otp",error);
-        res.status(500).json({
-            success:false,
-            message:"error while sending otp"});
+export const sendOtp = async (req, res) => {
+  const { email } = req.body;
+  try {
+    if (!email) return res.status(400).json({ message: "Email is required" });
+    const otp = crypto.randomInt(100000, 999999).toString(); // 6-digit otp
+    sendOtpEmail(email, otp);
+    await otpModal.findOneAndUpdate(
+      { email },
+      { otp, createdAt: new Date() },
+      { upsert: true, new: true }
+    );
+    res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+    });
+  } catch (error) {
+    console.log("error while sending otp", error);
+    res.status(500).json({
+      success: false,
+      message: "error while sending otp",
+    });
+  }
+};
+
+export const userRegistration = async (req, res) => {
+  try {
+    const { name, email, college, phoneNumber, city, country, password, otp } =
+      req.body;
+    const otpRecord = await otpModal.findOne({ email });
+    console.log("otp record", otpRecord);
+    console.log("otp", otp);
+    console.log(otpRecord.otp !== otp);
+    if (!otpRecord || otpRecord.otp !== otp) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
     }
-}
 
-export const userRegistration = async(req,res)=>{
-    try {
-        const {name,email,college,phoneNumber,city,country,password,otp}=req.body;
-        const otpRecord = await otpModal.findOne({email})
-         console.log("otp record",otpRecord);
-         console.log("otp",otp);
-         console.log(otpRecord.otp !== otp)
-        if (!otpRecord || otpRecord.otp !== otp) {
-            return res.status(400).json({ message: "Invalid or expired OTP" });
-        };
+    await otpModal.deleteOne({ email });
 
-        await otpModal.deleteOne({ email });
-
-        if(!name || !email || !college || !phoneNumber || !city|| !country || !password ){
-            return res.status(400).json({
-                "error":"Bad request",
-                "message":"All input fields are required !"
-            })
-        }
-        const user = await registration.findOne({email})
-        if(user)
-        {
-            return res.status(400).json({
-                success:false,
-                message:"email id already registered"
-            })
-        }
-        const hashedPassword = await bcrypt.hash(password,10);
-        const data = await registration.create({name:name,email:email.toLowerCase(),college:college,phoneNumber:phoneNumber,city:city,country:country,hashedPassword:hashedPassword});
-        if(data)
-        {
-            res.status(200).json({
-                success:true,
-                message:"You are registered successfully !"
-            })
-        }
-    } catch (error) {
-        if(error.code===11000)
-        {
-        res.status(500).json({
-            success:false,
-            message:"Entered phone number in registration form has already used by an user",
-        })
-    }else{
-            res.status(500).json({
-                success:false,
-                message:"Entered phone number in registration form has already used by an user",
-            })
-        };
-        console.log("error while user registration",error.code);
+    if (
+      !name ||
+      !email ||
+      !college ||
+      !phoneNumber ||
+      !city ||
+      !country ||
+      !password
+    ) {
+      return res.status(400).json({
+        error: "Bad request",
+        message: "All input fields are required !",
+      });
     }
-}
-
-export const userLogin = async(req,res)=>{
-    try {
-        const {email,password} = req.body;
-        if(!email || !password)
-        {
-            return res.status(400).json({
-                error:"Bad request",
-                message:"All input fields are required !"
-            })
-        }
-        const user = await registration.findOne({email});
-        if(!user)
-        {
-            return res.status(401).json({
-                error:"Unauthorized user",
-                message:"No user found with this email id "
-            })
-        }
-        console.log("user",user)
-        const passwordMatched = await bcrypt.compare(password,user.hashedPassword);
-        if(!passwordMatched)
-        {
-            return res.status(200).json({
-                error:"Unauthorized user",
-                message:"Incorrect password !"
-            })
-        }
-
-        const token = JWT.sign({_id:user._id},process.env.JWT_SECRET_KEY,{expiresIn:"7d"});
-       
-        res.status(200).json({
-            success:true,
-            message:"Loggined Successfully !",
-            user:{
-                name:user.name,
-                email:user.email,
-                stuClass:user.stuClass,
-                college:user.college,
-            },
-            token
-        })
-
-    } catch (error) {
-        res.status(500).json({
-            error:error,
-            message:"Error while user trying to login",
-        })
+    const user = await registration.findOne({ email });
+    if (user) {
+      return res.status(400).json({
+        success: false,
+        message: "email id already registered",
+      });
     }
-}
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const data = await registration.create({
+      name: name,
+      email: email.toLowerCase(),
+      college: college,
+      phoneNumber: phoneNumber,
+      city: city,
+      country: country,
+      hashedPassword: hashedPassword,
+    });
+    if (data) {
+      res.status(200).json({
+        success: true,
+        message: "You are registered successfully !",
+      });
+    }
+  } catch (error) {
+    if (error.code === 11000) {
+      res.status(500).json({
+        success: false,
+        message:
+          "Entered phone number in registration form has already used by an user",
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message:
+          "Entered phone number in registration form has already used by an user",
+      });
+    }
+    console.log("error while user registration", error.code);
+  }
+};
 
+export const userLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "Bad request",
+        message: "All input fields are required !",
+      });
+    }
+    const user = await registration.findOne({ email });
+    if (!user) {
+      return res.status(401).json({
+        error: "Unauthorized user",
+        message: "No user found with this email id ",
+      });
+    }
+    console.log("user", user);
+    const passwordMatched = await bcrypt.compare(password, user.hashedPassword);
+    if (!passwordMatched) {
+      return res.status(200).json({
+        error: "Unauthorized user",
+        message: "Incorrect password !",
+      });
+    }
+
+    const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET_KEY, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Loggined Successfully !",
+      user: {
+        name: user.name,
+        email: user.email,
+        stuClass: user.stuClass,
+        college: user.college,
+      },
+      token,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error,
+      message: "Error while user trying to login",
+    });
+  }
+};
