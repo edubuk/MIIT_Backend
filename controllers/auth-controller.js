@@ -111,7 +111,6 @@ export const sendOtpEmail = async (emailId, otp) => {
 </div>`;
 
   try {
-    console.log("env checking", process.env.EmailPass);
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -176,8 +175,18 @@ export const sendOtp = async (req, res) => {
 
 export const userRegistration = async (req, res) => {
   try {
-    const { name, email, college, phoneNumber, city, country, password, otp } =
-      req.body;
+    const {
+      name,
+      email,
+      college,
+      phoneNumber,
+      city,
+      country,
+      password,
+      otp,
+      studentClass,
+      isCollegeStudent,
+    } = req.body;
     const otpRecord = await otpModal.findOne({ email });
     console.log("otp record", otpRecord);
     console.log("otp", otp);
@@ -217,6 +226,8 @@ export const userRegistration = async (req, res) => {
       phoneNumber: phoneNumber,
       city: city,
       country: country,
+      studentClass: studentClass,
+      isCollegeStudent: isCollegeStudent,
       hashedPassword: hashedPassword,
     });
     if (data) {
@@ -271,15 +282,16 @@ export const userLogin = async (req, res) => {
     const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "7d",
     });
-
+    console.log("user", user);
     res.status(200).json({
       success: true,
       message: "Loggined Successfully !",
       user: {
         name: user.name,
         email: user.email,
-        stuClass: user.stuClass,
-        college: user.college,
+        studentClass: user?.studentClass,
+        college: user?.college || user?.school,
+        isCollegeStudent: user.isCollegeStudent,
       },
       token,
     });
