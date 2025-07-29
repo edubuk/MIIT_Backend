@@ -36,7 +36,7 @@ const registrationSchema = new mongoose.Schema(
       default: 0,
     },
     studentClass: {
-      type: String,
+      type: Number,
     },
     isCollegeStudent: {
       type: Boolean,

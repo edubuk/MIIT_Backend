@@ -8,15 +8,9 @@ export const getQuestionsStage1 = async (req, res) => {
     const structuredData = rawData.map((row) => ({
       // id: row["S. No"],
       questionId: parseInt(row["S. No"]),
-      question: row["Questions for Level 1 Exam (Class 6, 7, 8 & 9)"],
+      question: row["Questions"],
       intelligenceType: row["Intelligence-Type"],
       options: ["Yes", "May Be", "No"],
-
-      // options: {
-      //   yes: parseInt(row["Yes"]),
-      //   maybe: parseInt(row["May Be"]),
-      //   no: parseInt(row["No"]),
-      // },
     }));
 
     return res.status(200).json({
@@ -41,8 +35,8 @@ export const getQuestionsStage2 = async (req, res) => {
 
     const structuredData = rawData.map((row) => ({
       // id: row["S. No"],
-      questionId: parseInt(row["S. No."]),
-      question: row["Questions for Level 2 Exams (Class 10, 11, 12)"],
+      questionId: parseInt(row["S. No"]),
+      question: row["Questions"],
       QuestionType: row["Question Type"],
       intelligenceType: row["Intelligence-Type"],
       options: [
@@ -81,44 +75,13 @@ export const getQuestionsStage3 = async (req, res) => {
     const response = await axios.get(process.env.SHEET_TEST_STAGE_3);
     const rawData = response.data;
 
-    const structuredData = [];
-    let questionId = 1;
-
-    for (let i = 0; i < rawData.length; i++) {
-      const row = rawData[i];
-      if (row["S. N."].startsWith("Q")) {
-        const question = row["Question"];
-        const intelligenceType = row["Intelligence-Type"];
-        const options = [];
-
-        let j = i + 1;
-        while (j < rawData.length) {
-          const nextRow = rawData[j];
-          const s_n = nextRow["S. N."]?.toLowerCase();
-
-          if (["a", "b", "c", "d", "e"].includes(s_n)) {
-            if (nextRow["Question"]) {
-              options.push(nextRow["Question"].trim());
-            }
-            j++;
-          } else if (!s_n) {
-            j++; // skip blank rows
-          } else {
-            break;
-          }
-        }
-
-        structuredData.push({
-          questionId,
-          question: question.trim(),
-          intelligenceType: intelligenceType ? intelligenceType.trim() : "",
-          options,
-        });
-
-        questionId++;
-        i = j - 1; // move index to last read
-      }
-    }
+    const structuredData = rawData.map((row) => ({
+      // id: row["S. No"],
+      questionId: parseInt(row["S. No"]),
+      question: row["Questions"],
+      intelligenceType: row["Intelligence-Type"],
+      options: [row["Option A"], row["Option B"], row["Option C"]],
+    }));
 
     return res.status(200).json({
       success: true,
@@ -131,6 +94,65 @@ export const getQuestionsStage3 = async (req, res) => {
       success: false,
       message: "Failed to fetch structured questions",
       error: error.message,
+    });
+  }
+};
+const testEvaluationRules = [
+  {
+    stage: 1,
+    rules: {
+      0: 10, // marks
+      1: 5,
+      2: 0,
+    },
+  },
+  {
+    stage: 2,
+    rules: {
+      negative: {
+        0: 0,
+        1: 5,
+        2: 10,
+        3: 15,
+        4: 20,
+      },
+      positive: {
+        0: 20,
+        1: 15,
+        2: 10,
+        3: 5,
+        4: 0,
+      },
+    },
+  },
+  {
+    stage: 3,
+    rules: {
+      0: 10,
+      1: 0,
+      2: 5,
+    },
+  },
+];
+export const evaluateAnswer = async (req, res) => {
+  try {
+    const { userAnswers, stage } = req.body;
+    console.log("stage is ", stage);
+    console.log("userAnswers", userAnswers);
+    return res.status(200).json({
+      success: true,
+      message: "Answer evaluated successfully",
+      userAnswers,
+    });
+  } catch (error) {
+    console.error(
+      "Error evaluating answer in EVALUATE ANSWER CONTROLLER",
+      error
+    );
+    return res.status(500).json({
+      success: false,
+      message: "Failed to evaluate answer",
+      error,
     });
   }
 };
