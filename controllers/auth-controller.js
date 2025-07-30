@@ -282,6 +282,13 @@ export const userLogin = async (req, res) => {
     const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "7d",
     });
+    // Set cookie with the token
+    res.cookie("authToken", token, {
+      httpOnly: true,
+      secure: false, // Set to false for development (HTTP)
+      sameSite: "lax", // More permissive for cross-origin in dev
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
     console.log("user", user);
     res.status(200).json({
       success: true,

@@ -6,14 +6,24 @@ import cors from "cors";
 import authRouter from "./routes/authRoutes.js";
 import paymentRouter from "./routes/userRoutes.js";
 import questionsRouter from "./routes/questions.route.js";
-import axios from "axios";
+import cookieParser from "cookie-parser";
 const app = express();
 
 configDotenv();
 const mongoURI = process.env.MONGO_URI;
 dbConnection(mongoURI);
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://www.edubukmiitscreening.com",
+      "https://edubukmiitscreening.com",
+    ],
+    credentials: true,
+  })
+);
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
