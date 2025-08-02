@@ -1,4 +1,7 @@
 import axios from "axios";
+import JWT from "jsonwebtoken";
+import { Result } from "../model/result.model.js";
+import { registration } from "../model/userModel.js";
 
 export const getQuestionsStage1 = async (req, res) => {
   try {
@@ -211,7 +214,29 @@ const getTop3Intelligences = (intelligenceScores) => {
 export const evaluateAnswer = async (req, res) => {
   try {
     const { userAnswers, stage } = req.body;
+    const { authToken } = req.cookies;
 
+    if (!process.env.JWT_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT SECRET KEY NOT FOUND",
+      });
+    }
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request , sign in to continue",
+      });
+    }
+    const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
+    const userId = decodedToken._id;
+    const user = await registration.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Not valid user",
+      });
+    }
     // Validation
     if (!userAnswers || !Array.isArray(userAnswers)) {
       return res.status(400).json({
@@ -248,10 +273,29 @@ export const evaluateAnswer = async (req, res) => {
       userAnswers.reduce((sum, answer) => sum + (answer.timeTaken || 0), 0) /
       totalQuestions;
 
+    // storing result into the database;
+    const result = await Result.create({
+      userId,
+      stage,
+      answers: userAnswers,
+      averageTime: averageTimeTaken,
+      timedOutCount: timedOutQuestions,
+      intelligenceScores,
+      top3Intelligences,
+      allIntelligenceScores: intelligenceScores,
+      statistics: {
+        totalQuestions,
+        completedQuestions,
+        timedOutQuestions,
+        averageTimeTaken: Math.round(averageTimeTaken * 1000) / 1000, // Round to 3 decimal places
+      },
+    });
+
     //  store infos in database;
     return res.status(200).json({
       success: true,
       message: "Answer evaluated successfully",
+      result_id: result._id,
       data: {
         top3Intelligences,
         allIntelligenceScores: Object.values(intelligenceScores),
@@ -260,13 +304,8 @@ export const evaluateAnswer = async (req, res) => {
           completedQuestions,
           timedOutQuestions,
           averageTimeTaken: Math.round(averageTimeTaken * 1000) / 1000, // Round to 3 decimal places
-          completionRate:
-            Math.round((completedQuestions / totalQuestions) * 100 * 100) / 100, // Percentage with 2 decimal places
         },
         stage,
-        evaluationRules: testEvaluationRules.find(
-          (rule) => rule.stage === stage
-        ),
       },
     });
   } catch (error) {
@@ -282,72 +321,186 @@ export const evaluateAnswer = async (req, res) => {
   }
 };
 
-// Example usage function for testing
-export const testEvaluation = () => {
-  const sampleQuestions = [
-    {
-      questionId: 1,
-      question: "I do NOT like spending time with myself",
-      QuestionType: "NEGATIVE",
-      intelligenceType: "Intrapersonal",
-    },
-    {
-      questionId: 2,
-      question: "I enjoy working with numbers",
-      QuestionType: "POSITIVE",
-      intelligenceType: "Logical-Mathematical",
-    },
-    {
-      questionId: 3,
-      question: "I have trouble understanding others' emotions",
-      QuestionType: "NEGATIVE",
-      intelligenceType: "Interpersonal",
-    },
-  ];
+export const getInterestTestQuestions = async (req, res) => {
+  try {
+    if (!process.env.SHEET_INTEREST_TEST) {
+      return res.status(500).json({
+        success: false,
+        message: "NO ENV FOUND FOR INTEREST TEST SHEET",
+      });
+    }
+    const response = await axios.get(process.env.SHEET_INTEREST_TEST);
+    const rawData = response.data;
 
-  const sampleAnswers = [
-    {
-      questionId: 1,
-      question: "I do NOT like spending time with myself",
-      intelligenceType: "Intrapersonal",
-      selectedAnswer: "Strongly Agree",
-      selectedAnswerIndex: 0,
-      timeTaken: 1.768,
-      wasTimedOut: false,
-      status: "completed",
-    },
-    {
-      questionId: 2,
-      question: "I enjoy working with numbers",
-      intelligenceType: "Logical-Mathematical",
-      selectedAnswer: "Strongly Agree",
-      selectedAnswerIndex: 0,
-      timeTaken: 2.1,
-      wasTimedOut: false,
-      status: "completed",
-    },
-    {
-      questionId: 3,
-      question: "I have trouble understanding others' emotions",
-      intelligenceType: "Interpersonal",
-      selectedAnswer: "Disagree",
-      selectedAnswerIndex: 3,
-      timeTaken: 1.5,
-      wasTimedOut: false,
-      status: "completed",
-    },
-  ];
+    const structuredData = rawData.map((row) => ({
+      // id: row["S. No"],
+      questionId: parseInt(row["S. No"]),
+      question: row["Questions"],
+      interestType: row["Interest Type"],
+      options: ["Yes", "May Be", "No"],
+    }));
 
-  const intelligenceScores = calculateIntelligenceScores(
-    sampleAnswers,
-    sampleQuestions,
-    2
-  );
-  const top3 = getTop3Intelligences(intelligenceScores);
+    return res.status(200).json({
+      success: true,
+      message: "Questions fetched successfully interest test",
+      data: structuredData,
+    });
+  } catch (error) {
+    console.error("Error fetching data from Google Sheet", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch questions for interest test",
+      error,
+    });
+  }
+};
 
-  console.log("Sample Evaluation Results:");
-  console.log("Top 3 Intelligences:", top3);
-  console.log("All Intelligence Scores:", intelligenceScores);
+// ---------------------------------------------------------------------------------
+// Helper function to get score based on stage and question type
+const getScoreForInterestTest = (selectedAnswerIndex) => {
+  const stageRules = testEvaluationRules[0];
 
-  return { top3, intelligenceScores };
+  if (!stageRules) {
+    throw new Error(`No rules found for interest test similar to stage1`);
+  }
+
+  return stageRules.rules[selectedAnswerIndex] || 0;
+};
+
+// Function to evaluate all answers and calculate intelligence scores
+const calculateIntelligenceScoresForInterestTest = (userAnswers) => {
+  // NOTE:TODO: CHECK THISE FUNCTION WHERE IT IS CALLED WHETHER IT IS ACCEPTING THE SECOND PARAMETER AS QUESTIONS IF YES THEN REMOVE IT//YASH
+  const interestScores = {};
+
+  userAnswers.forEach((answer) => {
+    // Calculate score for this answer
+    const score = getScoreForInterestTest(answer.selectedAnswerIndex);
+
+    // Add score to the corresponding intelligence type
+    const interestType = answer.interestType;
+
+    if (!interestScores[interestType]) {
+      interestScores[interestType] = {
+        type: interestType,
+        totalScore: 0,
+        questionCount: 0,
+        averageScore: 0,
+      };
+    }
+
+    interestScores[interestType].totalScore += score;
+    interestScores[interestType].questionCount += 1;
+  });
+
+  // Calculate average scores
+  Object.keys(interestScores).forEach((type) => {
+    const interest = interestScores[type];
+    interest.averageScore = interest.totalScore / interest.questionCount;
+  });
+
+  return interestScores;
+};
+
+// Evaluate interest test questions;
+export const evaluateAnswerForInterestTest = async (req, res) => {
+  try {
+    const { userAnswers } = req.body;
+    const { result_id } = req.params;
+    const { authToken } = req.cookies;
+
+    if (!process.env.JWT_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT SECRET KEY NOT FOUND",
+      });
+    }
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request , sign in to continue",
+      });
+    }
+    if (!result_id) {
+      return res.status(400).json({
+        success: false,
+        message: "result_id is required",
+      });
+    }
+    const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
+    const userId = decodedToken._id;
+    const user = await registration.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Not valid user",
+      });
+    }
+    // Validation
+    if (!userAnswers || !Array.isArray(userAnswers)) {
+      return res.status(400).json({
+        success: false,
+        message: "userAnswers is required and must be an array",
+      });
+    }
+
+    console.log("Number of answers:", userAnswers.length);
+
+    // Calculate intelligence scores
+    const interestScores =
+      calculateIntelligenceScoresForInterestTest(userAnswers);
+
+    // Get top 3 intelligences
+    const top3Interests = getTop3Intelligences(interestScores);
+
+    // Calculate overall statistics
+    const totalQuestions = userAnswers.length;
+    const completedQuestions = userAnswers.filter(
+      (answer) => answer.status === "completed"
+    ).length;
+    const timedOutQuestions = userAnswers.filter(
+      (answer) => answer.wasTimedOut
+    ).length;
+    const averageTimeTaken =
+      userAnswers.reduce((sum, answer) => sum + (answer.timeTaken || 0), 0) /
+      totalQuestions;
+    let data = {
+      top3Interests,
+      allInterestScores: Object.values(interestScores),
+      statistics: {
+        totalQuestions,
+        completedQuestions,
+        timedOutQuestions,
+        averageTimeTaken: Math.round(averageTimeTaken * 1000) / 1000, // Round to 3 decimal places
+      },
+      // stage,
+    };
+    // storing result into the database;
+
+    const updatedResult = await Result.findByIdAndUpdate(
+      result_id,
+      {
+        $set: {
+          interestTestResult: data,
+        },
+      },
+      { new: true }
+    );
+    //  store infos in database;
+    return res.status(200).json({
+      success: true,
+      message: "Answer evaluated successfully",
+      databaseResult: updatedResult,
+      data,
+    });
+  } catch (error) {
+    console.error(
+      "Error evaluating answer in INTEREST TEST ANSWER CONTROLLER",
+      error
+    );
+    return res.status(500).json({
+      success: false,
+      message: "Failed to evaluate answer for interest test",
+      error: error.message,
+    });
+  }
 };

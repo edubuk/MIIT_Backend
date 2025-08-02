@@ -111,13 +111,6 @@ const statisticsSchema = new mongoose.Schema({
     required: true,
     default: 0,
   },
-  completionRate: {
-    type: Number,
-    required: true,
-    default: 0,
-    min: 0,
-    max: 100,
-  },
 });
 
 const evaluationRulesSchema = new mongoose.Schema({
@@ -170,23 +163,21 @@ const resultSchema = new mongoose.Schema(
       },
     },
     allIntelligenceScores: {
-      type: [intelligenceScoreSchema],
+      type: mongoose.Schema.Types.Mixed,
       required: true,
+      default: {},
+    },
+    interestTestResult: {
+      type: mongoose.Schema.Types.Mixed,
+      // required: true,
+      default: {},
     },
     statistics: {
       type: statisticsSchema,
       required: true,
     },
-    evaluationRules: {
-      type: evaluationRulesSchema,
-      required: true,
-    },
-    overallScore: {
-      type: Number,
-      default: 0,
-    },
   },
   { timestamps: true }
 );
 
-export const result = mongoose.model("Result", resultSchema);
+export const Result = mongoose.model("Result", resultSchema);

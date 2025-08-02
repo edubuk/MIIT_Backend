@@ -1,12 +1,22 @@
 import express from "express";
-import { getQuestionsStage1 } from "../controllers/questions.controller.js";
-import { getQuestionsStage2 } from "../controllers/questions.controller.js";
-import { getQuestionsStage3 } from "../controllers/questions.controller.js";
-import { evaluateAnswer } from "../controllers/questions.controller.js";
+import {
+  getInterestTestQuestions,
+  getQuestionsStage1,
+  getQuestionsStage2,
+  getQuestionsStage3,
+  evaluateAnswer,
+  evaluateAnswerForInterestTest,
+} from "../controllers/questions.controller.js";
+
 const router = express.Router();
 
 router.get("/test-stage-1", getQuestionsStage1);
 router.get("/test-stage-2", getQuestionsStage2);
 router.get("/test-stage-3", getQuestionsStage3);
 router.post("/evaluate-answer", evaluateAnswer);
+router.get("/interest-test", getInterestTestQuestions);
+router.post(
+  "/evaluate-answer-interest-test/:result_id",
+  evaluateAnswerForInterestTest
+);
 export default router;
