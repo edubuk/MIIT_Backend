@@ -176,6 +176,18 @@ const resultSchema = new mongoose.Schema(
       type: statisticsSchema,
       required: true,
     },
+    careerPaths: {
+      type: [String],
+      default: [],
+    },
+    combinations: {
+      type: [String],
+      default: [],
+    },
+    aiCareerRecommendations: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
   },
   { timestamps: true }
 );

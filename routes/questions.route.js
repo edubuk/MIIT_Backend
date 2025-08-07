@@ -6,6 +6,7 @@ import {
   getQuestionsStage3,
   evaluateAnswer,
   evaluateAnswerForInterestTest,
+  getFinalResult,
 } from "../controllers/questions.controller.js";
 
 const router = express.Router();
@@ -19,4 +20,5 @@ router.post(
   "/evaluate-answer-interest-test/:result_id",
   evaluateAnswerForInterestTest
 );
+router.get("/get/final-result/:result_id", getFinalResult);
 export default router;

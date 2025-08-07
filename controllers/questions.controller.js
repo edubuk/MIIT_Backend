@@ -2,6 +2,7 @@ import axios from "axios";
 import JWT from "jsonwebtoken";
 import { Result } from "../model/result.model.js";
 import { registration } from "../model/userModel.js";
+import { getAiCareerRecommendations, getCareerPath } from "../index.js";
 
 export const getQuestionsStage1 = async (req, res) => {
   try {
@@ -435,6 +436,14 @@ export const evaluateAnswerForInterestTest = async (req, res) => {
         message: "Not valid user",
       });
     }
+    // check resultid is valid or no;
+    const result = await Result.findById(result_id);
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Not valid result",
+      });
+    }
     // Validation
     if (!userAnswers || !Array.isArray(userAnswers)) {
       return res.status(400).json({
@@ -476,11 +485,45 @@ export const evaluateAnswerForInterestTest = async (req, res) => {
     };
     // storing result into the database;
 
+    // getting career path
+    // testing
+    const top3Intelligences = result.top3Intelligences.map(
+      (intelligence) => intelligence.intelligenceType
+    );
+    const top3InterestsCreatedAbove = top3Interests
+      .map((interest) => interest.intelligenceType)
+      .join(",");
+    let careerPaths = [];
+    let combinations = [];
+    for (let i = 0; i < 3; i++) {
+      const combination = `${top3Intelligences[i]},${top3InterestsCreatedAbove}`;
+      combinations.push(combination);
+      console.log(combination);
+      const careerPath = await getCareerPath(combination);
+      careerPaths.push(careerPath);
+    }
+    if (careerPaths.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Career path not found for the given intelligence type and interests",
+      });
+    }
+    console.log("check top3InterestsCreatedAbove", top3InterestsCreatedAbove);
+    const aiCareerRecommendations = await getAiCareerRecommendations({
+      careerPaths,
+      top3Intelligences: result.top3Intelligences,
+      top3Interests: top3Interests,
+    });
+
     const updatedResult = await Result.findByIdAndUpdate(
       result_id,
       {
         $set: {
           interestTestResult: data,
+          careerPaths,
+          aiCareerRecommendations,
+          combinations,
         },
       },
       { new: true }
@@ -489,8 +532,9 @@ export const evaluateAnswerForInterestTest = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Answer evaluated successfully",
+      combinations,
+      careerPaths,
       databaseResult: updatedResult,
-      data,
     });
   } catch (error) {
     console.error(
@@ -500,6 +544,54 @@ export const evaluateAnswerForInterestTest = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to evaluate answer for interest test",
+      error: error.message,
+    });
+  }
+};
+export const getFinalResult = async (req, res) => {
+  if (!process.env.JWT_SECRET_KEY) {
+    return res.status(500).json({
+      success: false,
+      message: "JWT SECRET KEY NOT FOUND",
+    });
+  }
+  try {
+    const { result_id } = req.params;
+    const { authToken } = req.cookies;
+
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request , sign in to continue",
+      });
+    }
+    const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
+    const userId = decodedToken._id;
+    const user = await registration.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Not valid user",
+      });
+    }
+    const result = await Result.findOne({ _id: result_id, userId: user._id });
+    if (!result) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Unauthorize request , you are only allowed to see your own result!",
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Result fetched successfully",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error fetching result", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch result",
       error: error.message,
     });
   }
