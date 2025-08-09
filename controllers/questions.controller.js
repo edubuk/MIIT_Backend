@@ -6,21 +6,59 @@ import { getAiCareerRecommendations, getCareerPath } from "../index.js";
 
 export const getQuestionsStage1 = async (req, res) => {
   try {
+    const { authToken } = req.cookies;
+
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request, sign in to continue",
+      });
+    }
+
+    if (!process.env.JWT_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT SECRET KEY NOT FOUND",
+      });
+    }
+
+    const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
+    const userId = decodedToken._id;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Student ID is required for question shuffling",
+      });
+    }
+
     const response = await axios.get(process.env.SHEET_TEST_STAGE_1);
     const rawData = response.data;
 
     const structuredData = rawData.map((row) => ({
       // id: row["S. No"],
-      questionId: parseInt(row["S. No"]),
+      originalQuestionId: parseInt(row["S. No"]),
       question: row["Questions"],
       intelligenceType: row["Intelligence-Type"],
       options: ["Yes", "May Be", "No"],
     }));
+    // Shuffle questions deterministically based on student ID
+    const shuffledQuestions = shuffleWithStudentId(structuredData, userId);
 
+    // Re-assign sequential questionId for display (1, 2, 3, ...)
+    const questionsWithOrderedId = shuffledQuestions.map((question, index) => ({
+      questionId: index + 1, // Sequential ID for frontend display
+      originalQuestionId: question.originalQuestionId, // Keep for backend reference
+      question: question.question,
+      intelligenceType: question.intelligenceType,
+      options: question.options,
+    }));
     return res.status(200).json({
       success: true,
-      message: "Questions fetched successfully testStage1",
-      data: structuredData,
+      message: "Questions fetched and shuffled successfully for student stage2",
+      studentId: userId,
+      totalQuestions: questionsWithOrderedId.length,
+      data: questionsWithOrderedId,
     });
   } catch (error) {
     console.error("Error fetching data from Google Sheet", error);
@@ -32,14 +70,70 @@ export const getQuestionsStage1 = async (req, res) => {
   }
 };
 
+// Simple hash function to create seed from student ID
+function hashCode(str) {
+  let hash = 0;
+  if (str.length === 0) return hash;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+// Fisher-Yates shuffle with deterministic randomization
+function shuffleWithStudentId(array, studentId) {
+  const shuffled = [...array];
+  const seed = hashCode(studentId.toString());
+
+  // Use Linear Congruential Generator for predictable randomization
+  let rng = seed;
+
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    rng = (rng * 1664525 + 1013904223) % Math.pow(2, 32);
+    const j = Math.floor((rng / Math.pow(2, 32)) * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled;
+}
+
 export const getQuestionsStage2 = async (req, res) => {
   try {
+    // Get student identifier from request (could be from params, query, or body)
+
+    const { authToken } = req.cookies;
+
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request, sign in to continue",
+      });
+    }
+
+    if (!process.env.JWT_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT SECRET KEY NOT FOUND",
+      });
+    }
+
+    const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
+    const userId = decodedToken._id;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Student ID is required for question shuffling",
+      });
+    }
+
     const response = await axios.get(process.env.SHEET_TEST_STAGE_2);
     const rawData = response.data;
 
     const structuredData = rawData.map((row) => ({
-      // id: row["S. No"],
-      questionId: parseInt(row["S. No"]),
+      originalQuestionId: parseInt(row["S. No"]), // Keep original ID for reference
       question: row["Questions"],
       QuestionType: row["Question Type"],
       intelligenceType: row["Intelligence-Type"],
@@ -50,19 +144,27 @@ export const getQuestionsStage2 = async (req, res) => {
         "Disagree",
         "Strongly Disagree",
       ],
+    }));
 
-      // options: {
-      //   yes: parseInt(row["Yes"]),
-      //   maybe: parseInt(row["May Be"]),
-      //   no: parseInt(row["No"]),
-      // },
+    // Shuffle questions deterministically based on student ID
+    const shuffledQuestions = shuffleWithStudentId(structuredData, userId);
+
+    // Re-assign sequential questionId for display (1, 2, 3, ...)
+    const questionsWithOrderedId = shuffledQuestions.map((question, index) => ({
+      questionId: index + 1, // Sequential ID for frontend display
+      originalQuestionId: question.originalQuestionId, // Keep for backend reference
+      question: question.question,
+      QuestionType: question.QuestionType,
+      intelligenceType: question.intelligenceType,
+      options: question.options,
     }));
 
     return res.status(200).json({
       success: true,
-      message: "Questions fetched successfully testStage2",
-      rawData,
-      data: structuredData,
+      message: "Questions fetched and shuffled successfully for student stage2",
+      studentId: userId,
+      totalQuestions: questionsWithOrderedId.length,
+      data: questionsWithOrderedId,
     });
   } catch (error) {
     console.error("Error fetching data from Google Sheet", error);
@@ -76,6 +178,31 @@ export const getQuestionsStage2 = async (req, res) => {
 
 export const getQuestionsStage3 = async (req, res) => {
   try {
+    const { authToken } = req.cookies;
+
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request, sign in to continue",
+      });
+    }
+
+    if (!process.env.JWT_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT SECRET KEY NOT FOUND",
+      });
+    }
+
+    const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
+    const userId = decodedToken._id;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Student ID is required for question shuffling",
+      });
+    }
     const response = await axios.get(process.env.SHEET_TEST_STAGE_3);
     const rawData = response.data;
 
@@ -86,11 +213,25 @@ export const getQuestionsStage3 = async (req, res) => {
       intelligenceType: row["Intelligence-Type"],
       options: [row["Option A"], row["Option B"], row["Option C"]],
     }));
+    // Shuffle questions deterministically based on student ID
+    const shuffledQuestions = shuffleWithStudentId(structuredData, userId);
+
+    // Re-assign sequential questionId for display (1, 2, 3, ...)
+    const questionsWithOrderedId = shuffledQuestions.map((question, index) => ({
+      questionId: index + 1, // Sequential ID for frontend display
+      originalQuestionId: question.originalQuestionId, // Keep for backend reference
+      question: question.question,
+      QuestionType: question.QuestionType,
+      intelligenceType: question.intelligenceType,
+      options: question.options,
+    }));
 
     return res.status(200).json({
       success: true,
-      message: "Structured questions fetched successfully for stage 3",
-      data: structuredData,
+      message: "Questions fetched and shuffled successfully for student stage3",
+      studentId: userId,
+      totalQuestions: questionsWithOrderedId.length,
+      data: questionsWithOrderedId,
     });
   } catch (error) {
     console.error("Error processing stage 3 questions:", error);
@@ -586,6 +727,7 @@ export const getFinalResult = async (req, res) => {
       success: true,
       message: "Result fetched successfully",
       data: result,
+      user,
     });
   } catch (error) {
     console.error("Error fetching result", error);

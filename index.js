@@ -11,6 +11,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import xlsx from "xlsx";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import puppeteer from "puppeteer";
 const app = express();
 
 configDotenv();
@@ -19,10 +20,11 @@ dbConnection(mongoURI);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
   model: "gemini-2.0-flash-exp",
+  // model: "gemini-2.5-flash",
   generationConfig: {
     temperature: 0.7,
     topP: 0.8,
-    maxOutputTokens: 2048,
+    maxOutputTokens: 4096, // Increased to handle full response
   },
 });
 app.use(
@@ -36,7 +38,7 @@ app.use(
   })
 );
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 // ES module workaround for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -48,103 +50,6 @@ const workbook = xlsx.readFile(filePath);
 const sheetName = workbook.SheetNames[0];
 const sheet = workbook.Sheets[sheetName];
 const data = xlsx.utils.sheet_to_json(sheet);
-const result = {
-  top3Intelligences: [
-    {
-      rank: 1,
-      intelligenceType: "Bodily-Kinesthetic",
-      totalScore: 25,
-      averageScore: 12.5,
-      questionCount: 2,
-      _id: {
-        $oid: "688dc4bff6b338f0722c3578",
-      },
-    },
-    {
-      rank: 2,
-      intelligenceType: "Logical-Mathematical",
-      totalScore: 25,
-      averageScore: 12.5,
-      questionCount: 2,
-      _id: {
-        $oid: "688dc4bff6b338f0722c3579",
-      },
-    },
-    {
-      rank: 3,
-      intelligenceType: "Musical",
-      totalScore: 20,
-      averageScore: 10,
-      questionCount: 2,
-      _id: {
-        $oid: "688dc4bff6b338f0722c357a",
-      },
-    },
-  ],
-  interestTestResult: {
-    top3Interests: [
-      {
-        rank: 1,
-        intelligenceType: "Investigative",
-        totalScore: 15,
-        averageScore: 7.5,
-        questionCount: 2,
-      },
-      {
-        rank: 2,
-        intelligenceType: "Social",
-        totalScore: 15,
-        averageScore: 7.5,
-        questionCount: 2,
-      },
-      {
-        rank: 3,
-        intelligenceType: "Artistic",
-        totalScore: 10,
-        averageScore: 3.33,
-        questionCount: 3,
-      },
-    ],
-    allInterestScores: [
-      {
-        type: "Artistic",
-        totalScore: 10,
-        questionCount: 3,
-        averageScore: 3.3333333333333335,
-      },
-      {
-        type: "Investigative",
-        totalScore: 15,
-        questionCount: 2,
-        averageScore: 7.5,
-      },
-      {
-        type: "Social",
-        totalScore: 15,
-        questionCount: 2,
-        averageScore: 7.5,
-      },
-      {
-        type: "Enterprising",
-        totalScore: 10,
-        questionCount: 1,
-        averageScore: 10,
-      },
-      {
-        type: "Realistic",
-        totalScore: 10,
-        questionCount: 2,
-        averageScore: 5,
-      },
-    ],
-    statistics: {
-      totalQuestions: 10,
-      completedQuestions: 10,
-      timedOutQuestions: 0,
-      averageTimeTaken: 1.217,
-    },
-  },
-};
 
 // POST endpoint
 app.post("/get-career-path", (req, res) => {
@@ -574,6 +479,221 @@ app.get("/", (req, res) => {
     success: true,
     message: "Health is ok!",
   });
+});
+
+// Helper function to wait for network idle with timeout
+const waitForNetworkIdle = async (page, timeout = 30000) => {
+  return Promise.race([
+    page.waitForLoadState("networkidle"),
+    new Promise((resolve) => setTimeout(resolve, timeout)),
+  ]);
+};
+export function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+app.post("/api/generate-pdf", async (req, res) => {
+  let browser = null;
+  let page = null;
+
+  try {
+    const { url, html, filename = "document.pdf" } = req.body;
+
+    console.log("Starting PDF generation...");
+    console.log("HTML length:", html ? html.length : 0, "characters");
+
+    // Launch browser with minimal args for stability
+    browser = await puppeteer.launch({
+      headless: "new",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-web-security",
+        "--allow-running-insecure-content",
+        "--disable-features=VizDisplayCompositor",
+        "--max_old_space_size=4096", // Increase memory limit
+      ],
+    });
+
+    page = await browser.newPage();
+
+    // Increase timeouts significantly
+    await page.setDefaultTimeout(120000); // 2 minutes
+    await page.setDefaultNavigationTimeout(120000); // 2 minutes
+
+    // Set viewport
+    await page.setViewport({
+      width: 1200,
+      height: 800,
+      deviceScaleFactor: 1,
+    });
+
+    // Load content
+    if (url) {
+      console.log("Loading URL:", url);
+      await page.goto(url, {
+        waitUntil: "networkidle2",
+        timeout: 60000,
+      });
+    } else if (html) {
+      console.log("Setting HTML content...");
+      console.log("HTML preview:", html.substring(0, 200) + "...");
+
+      // Try to set content with increased timeout
+      try {
+        await page.setContent(html, {
+          waitUntil: "domcontentloaded", // Change to domcontentloaded instead of networkidle2
+          timeout: 120000, // 2 minutes timeout
+        });
+        console.log("HTML content set successfully");
+      } catch (contentError) {
+        console.error("Failed to set HTML content:", contentError.message);
+        throw new Error(`Failed to load HTML content: ${contentError.message}`);
+      }
+    } else {
+      throw new Error("Either url or html must be provided");
+    }
+
+    // Wait for images with longer timeout and better error handling
+    console.log("Waiting for images to load...");
+    try {
+      await page.waitForFunction(
+        () => {
+          const images = document.querySelectorAll("img");
+          console.log("Images found:", images.length);
+          const loadedImages = Array.from(images).filter(
+            (img) => img.complete && img.naturalWidth > 0
+          );
+          console.log("Loaded images:", loadedImages.length);
+          return loadedImages.length === images.length || images.length === 0;
+        },
+        {
+          timeout: 30000, // 30 seconds for images
+          polling: 1000, // Check every second
+        }
+      );
+      console.log("All images loaded successfully");
+    } catch (imageError) {
+      console.log("Image loading timeout, checking what's loaded...");
+
+      // Check which images failed to load
+      const imageStatus = await page.evaluate(() => {
+        const images = document.querySelectorAll("img");
+        return Array.from(images).map((img, index) => ({
+          index,
+          src: img.src.substring(0, 50) + "...", // First 50 chars
+          complete: img.complete,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+        }));
+      });
+
+      console.log("Image status:", imageStatus);
+      console.log("Proceeding with PDF generation...");
+    }
+
+    // Add print-specific CSS
+    await page.addStyleTag({
+      content: `
+        @page {
+          margin: 0.5in;
+          size: A4;
+        }
+        
+        @media print {
+          * {
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          img {
+            max-width: 100% !important;
+            height: auto !important;
+            page-break-inside: avoid;
+          }
+          
+          .no-pdf,
+          button,
+          [role="button"] {
+            display: none !important;
+          }
+          
+          .page-break {
+            page-break-before: always;
+          }
+        }
+      `,
+    });
+
+    // Longer delay for CSS and images to settle
+    console.log("Waiting for content to settle...");
+    await delay(6000);
+
+    console.log("Generating PDF...");
+
+    // Generate PDF with specific options
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: false,
+      margin: {
+        top: "0.5in",
+        right: "0.5in",
+        bottom: "0.5in",
+        left: "0.5in",
+      },
+    });
+
+    console.log("PDF generated successfully, size:", pdf.length, "bytes");
+
+    // Validate PDF buffer
+    if (!pdf || pdf.length === 0) {
+      throw new Error("Generated PDF is empty");
+    }
+
+    // Close browser before sending response
+    await browser.close();
+    browser = null;
+
+    // Set proper headers for PDF
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdf.length);
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    // Send the PDF buffer directly
+    res.end(pdf);
+  } catch (error) {
+    console.error("PDF generation error:", error);
+    console.error("Error stack:", error.stack);
+
+    // Clean up browser
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error("Browser close error:", closeError);
+      }
+    }
+
+    // Send error response only if headers haven't been sent
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "PDF generation failed",
+        message: error.message,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      });
+    }
+  }
 });
 
 app.listen(process.env.PORT, () => {
