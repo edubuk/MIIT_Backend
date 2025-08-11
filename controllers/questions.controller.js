@@ -372,7 +372,9 @@ export const evaluateAnswer = async (req, res) => {
     }
     const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
     const userId = decodedToken._id;
+    console.log(userId);
     const user = await registration.findById(userId);
+    console.log("user is", user);
     if (!user) {
       return res.status(404).json({
         success: false,
