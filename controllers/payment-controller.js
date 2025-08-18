@@ -1,10 +1,9 @@
-
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { config } from "dotenv";
 import Payment from "../model/paymentModel.js";
 import { customAlphabet } from "nanoid";
-import nodemailer from "nodemailer"
+import nodemailer from "nodemailer";
 config();
 
 const keyId = process.env.RZP_KEY_ID;
@@ -20,11 +19,11 @@ const instance = new Razorpay({
 });
 //console.log("keyId", keyId)
 export const checkout = async (req, res) => {
-  const { amount, curr } = req.body
+  const { amount, curr } = req.body;
   try {
     const options = {
-      "amount": Number(amount),
-      "currency": curr,
+      amount: Number(amount),
+      currency: curr,
     };
 
     const order = await instance.orders.create(options);
@@ -89,7 +88,7 @@ team at <strong>support@edubuk.com</strong> or call <strong>+91 9250411261</stro
 
   try {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
         user: "support@edubukeseal.org",
         pass: process.env.EmailPass,
@@ -112,9 +111,9 @@ team at <strong>support@edubuk.com</strong> or call <strong>+91 9250411261</stro
 
 const generateCode = async () => {
   let i = 0;
-  const PREFIX = "99"
+  const PREFIX = "99";
   while (i < 1000) {
-    const nanoId = customAlphabet('1234567890', 8)
+    const nanoId = customAlphabet("1234567890", 8);
     const newCode = PREFIX + nanoId();
     //console.log("new-code",newCode);
     const exists = await Payment.findOne({ regCode: newCode });
@@ -123,13 +122,16 @@ const generateCode = async () => {
     }
     i++;
   }
-}
-
-
+};
 
 export const paymentVerification = async (req, res) => {
-
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, emailId, userName } = req.body;
+  const {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+    emailId,
+    userName,
+  } = req.body;
 
   const body = razorpay_order_id + "|" + razorpay_payment_id;
 
@@ -143,21 +145,23 @@ export const paymentVerification = async (req, res) => {
   if (isAuthentic) {
     const registrationCode = await generateCode();
     if (registrationCode) {
-      await sendEmail(emailId, userName, registrationCode,)
+      await sendEmail(emailId, userName, registrationCode);
     }
-    await Payment.create({ emailId: emailId, paymentId: razorpay_payment_id, regCode: registrationCode });
+    await Payment.create({
+      emailId: emailId,
+      paymentId: razorpay_payment_id,
+      regCode: registrationCode,
+    });
     res.status(200).json({
       success: true,
       paymentId: razorpay_payment_id,
     });
-
   } else {
     res.status(400).json({
       success: false,
     });
   }
 };
-
 
 export const couponVerification = async (req, res) => {
   try {
@@ -222,48 +226,44 @@ export const couponVerification = async (req, res) => {
       default:
         res.status(200).json({
           success: false,
-          value: currPrice
-        })
+          value: currPrice,
+        });
     }
     if (currPrice !== 499)
       res.status(200).json({
         success: true,
-        value: currPrice
-      })
+        value: currPrice,
+      });
   } catch (error) {
     res.status(501).json({
       success: false,
       message: "error while coupon verification",
-      error
-    })
+      error,
+    });
   }
-}
+};
 
-export const getPaymentId = async(req,res)=>{
-  const {emailId} = req.params;
+export const getPaymentId = async (req, res) => {
+  const { emailId } = req.params;
   try {
-    const data = await Payment.findOne({emailId:emailId});
-    if(data)
-    {
+    const data = await Payment.findOne({ emailId: emailId });
+    if (data) {
       res.status(200).json({
-        success:true,
-        paymentId:data.paymentId
-      })
-    }
-    else{
+        success: true,
+        paymentId: data.paymentId,
+      });
+    } else {
       res.status(400).json({
-        success:false,
-        message:"no payment record found"
-      })
+        success: false,
+        message: "no payment record found",
+      });
     }
   } catch (error) {
-    console.log("error while fetching user paymentId",error);
+    console.log("error while fetching user paymentId", error);
     res.status(500).json({
-      success:false,
-      message:"internal server error",
-      error
-    })
+      success: false,
+      message: "internal server error",
+      error,
+    });
   }
-}
-
-
+};
