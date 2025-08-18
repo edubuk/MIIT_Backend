@@ -4,6 +4,8 @@ import { config } from "dotenv";
 import Payment from "../model/paymentModel.js";
 import { customAlphabet } from "nanoid";
 import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
+import { registration } from "../model/userModel.js";
 config();
 
 const keyId = process.env.RZP_KEY_ID;
@@ -263,6 +265,48 @@ export const getPaymentId = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "internal server error",
+      error,
+    });
+  }
+};
+export const checkPaymentStatusForStudents = async (req, res) => {
+  try {
+    const { authToken } = req.cookies;
+    // console.log(authToken);
+    if (!authToken) {
+      return res.status(403).json("UnAuthorized request!");
+    }
+    if (!process.env.JWT_SECRET_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "JWT SECRET KEY NOT FOUND",
+      });
+    }
+    const decodedToken = jwt.verify(authToken, process.env.JWT_SECRET_KEY);
+    const userId = decodedToken._id;
+
+    if (!userId) {
+      return res.status(403).json("Unable to decode the token!");
+    }
+    const user = await registration.findById(userId);
+    if (!user) {
+      return res.status(403).json("No user found!");
+    }
+    // now check whether users email id is present in the payment collections
+    const payment = await Payment.findOne({ emailId: user.email });
+    if (!payment) {
+      return res.status(404).json("No payment record found");
+    }
+    return res.status(200).json({
+      message: "Payment record found!",
+      payment,
+    });
+  } catch (error) {
+    console.log("error while fetching user paymentId", error);
+    return res.status(500).json({
+      success: false,
+      message:
+        "ERROR:WHILE FETCHINF CHECKPAYMENT STATUS FOR STUDENTS CONTROLLER",
       error,
     });
   }
