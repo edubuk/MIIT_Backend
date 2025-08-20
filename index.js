@@ -37,25 +37,26 @@ const model = genAI.getGenerativeModel({
 //     credentials: true,
 //   })
 // );
-const corsOptions = {
-  origin: [
-    "http://localhost:5173",
-    "https://www.edubukmiitscreening.com",
-    "https://edubukmiitscreening.com",
-  ],
-  credentials: true,
-  optionsSuccessStatus: 200, // For legacy browser support
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Origin",
-    "X-Requested-With",
-    "Content-Type",
-    "Accept",
-    "Authorization",
-    "Cache-Control",
-  ],
-};
-app.use(cors(corsOptions));
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://www.edubukmiitscreening.com",
+  "https://edubukmiitscreening.com",
+];
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));

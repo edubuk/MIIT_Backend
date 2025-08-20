@@ -292,33 +292,39 @@ export const userLogin = async (req, res) => {
       });
     }
 
-    const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET_KEY, {
-      expiresIn: "7d",
-    });
+    const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET_KEY);
 
     // Fixed cookie configuration for production
-    const isProduction = process.env.NODE_ENV === "production";
+    // const isProduction = process.env.NODE_ENV === "production";
 
-    res.cookie("authToken", token, {
-      httpOnly: true,
-      secure: isProduction, // true for production (HTTPS), false for development (HTTP)
-      sameSite: isProduction ? "strict" : "lax", // stricter in production
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    // res.cookie("authToken", token, {
+    //   httpOnly: true,
+    //   secure: isProduction, // true for production (HTTPS), false for development (HTTP)
+    //   sameSite: isProduction ? "strict" : "lax", // stricter in production
+    //   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    // });
     console.log("user", user);
-    res.status(200).json({
-      success: true,
-      NODE_ENV: process.env.NODE_ENV || "No env found!",
-      message: "Loggined Successfully !",
-      user: {
-        name: user.name,
-        email: user.email,
-        studentClass: user?.studentClass,
-        college: user?.college || user?.school,
-        isCollegeStudent: user.isCollegeStudent,
-      },
-      token,
-    });
+    return res
+      .status(200)
+      .cookie("authToken", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day
+      })
+      .json({
+        success: true,
+        NODE_ENV: process.env.NODE_ENV || "No env found!",
+        message: "Loggined Successfully !",
+        user: {
+          name: user.name,
+          email: user.email,
+          studentClass: user?.studentClass,
+          college: user?.college || user?.school,
+          isCollegeStudent: user.isCollegeStudent,
+        },
+        token,
+      });
   } catch (error) {
     res.status(500).json({
       error: error,
@@ -353,7 +359,7 @@ export const userLogout = async (req, res) => {
 export const checkValidUser = async (req, res) => {
   try {
     const { authToken } = req.cookies;
-
+    console.log("cookie auth token", authToken);
     if (!authToken) {
       return res.status(401).json({
         success: true,
