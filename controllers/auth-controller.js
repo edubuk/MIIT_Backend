@@ -255,6 +255,19 @@ export const userRegistration = async (req, res) => {
 };
 
 export const userLogin = async (req, res) => {
+  if (!process.env.NODE_ENV) {
+    return res.status(500).json({
+      success: false,
+      NODE_ENV: process.env.NODE_ENV,
+      message: "NODE_ENV NOT FOUND",
+    });
+  }
+  if (!process.env.JWT_SECRET_KEY) {
+    return res.status(500).json({
+      success: false,
+      message: "JWT_SECRET_KEY NOT FOUND",
+    });
+  }
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -282,16 +295,20 @@ export const userLogin = async (req, res) => {
     const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "7d",
     });
-    // Set cookie with the token
+
+    // Fixed cookie configuration for production
+    const isProduction = process.env.NODE_ENV === "production";
+
     res.cookie("authToken", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      secure: isProduction, // true for production (HTTPS), false for development (HTTP)
+      sameSite: isProduction ? "strict" : "lax", // stricter in production
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
     console.log("user", user);
     res.status(200).json({
       success: true,
+      NODE_ENV: process.env.NODE_ENV || "No env found!",
       message: "Loggined Successfully !",
       user: {
         name: user.name,
@@ -336,9 +353,11 @@ export const userLogout = async (req, res) => {
 export const checkValidUser = async (req, res) => {
   try {
     const { authToken } = req.cookies;
+
     if (!authToken) {
       return res.status(401).json({
         success: true,
+        authToken: authToken,
         message: "Sign in to continue",
       });
     }
