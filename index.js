@@ -261,7 +261,7 @@ ${top3Interests
     };
   } catch (error) {
     console.error("Error generating career recommendations:", error);
-    return;
+    throw new Error("Error generating career recommendations using AI");
   }
 };
 //app.use('/api/v1/user',userRouter);

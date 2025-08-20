@@ -285,8 +285,8 @@ export const userLogin = async (req, res) => {
     // Set cookie with the token
     res.cookie("authToken", token, {
       httpOnly: true,
-      secure: false, // Set to false for development (HTTP)
-      sameSite: "lax", // More permissive for cross-origin in dev
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     console.log("user", user);
@@ -306,6 +306,30 @@ export const userLogin = async (req, res) => {
     res.status(500).json({
       error: error,
       message: "Error while user trying to login",
+    });
+  }
+};
+
+// user logout
+export const userLogout = async (req, res) => {
+  try {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Method 2: Alternative - use clearCookie (does the same thing)
+    res.clearCookie("authToken", {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "strict",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Logged out successfully!",
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error,
+      message: "Error while logging out",
     });
   }
 };
