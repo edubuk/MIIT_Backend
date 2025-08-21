@@ -271,17 +271,41 @@ export const getPaymentId = async (req, res) => {
 };
 export const checkPaymentStatusForStudents = async (req, res) => {
   try {
-    const { authToken } = req.cookies;
-    // console.log(authToken);
-    if (!authToken) {
-      return res.status(403).json("UnAuthorized request!");
+    // Extract token from Authorization header
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Authorization header missing",
+      });
     }
+
+    // Check if it starts with 'Bearer '
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+
+    // Extract the actual token (remove 'Bearer ' prefix)
+    const authToken = authHeader.substring(7); // 'Bearer '.length = 7
+
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Token not provided",
+      });
+    }
+
     if (!process.env.JWT_SECRET_KEY) {
       return res.status(500).json({
         success: false,
         message: "JWT SECRET KEY NOT FOUND",
       });
     }
+
     const decodedToken = jwt.verify(authToken, process.env.JWT_SECRET_KEY);
     const userId = decodedToken._id;
 

@@ -294,27 +294,20 @@ export const userLogin = async (req, res) => {
 
     const token = JWT.sign({ _id: user._id }, process.env.JWT_SECRET_KEY);
 
-    // Fixed cookie configuration for production
-    // const isProduction = process.env.NODE_ENV === "production";
-
-    // res.cookie("authToken", token, {
-    //   httpOnly: true,
-    //   secure: isProduction, // true for production (HTTPS), false for development (HTTP)
-    //   sameSite: isProduction ? "strict" : "lax", // stricter in production
-    //   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    // });
     console.log("user", user);
     return res
       .status(200)
       .cookie("authToken", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        sameSite: "none",
         expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day
+        path: "/",
       })
       .json({
         success: true,
         NODE_ENV: process.env.NODE_ENV || "No env found!",
+        secure: process.env.NODE_ENV === "production",
         message: "Loggined Successfully !",
         user: {
           name: user.name,
@@ -358,15 +351,34 @@ export const userLogout = async (req, res) => {
 };
 export const checkValidUser = async (req, res) => {
   try {
-    const { authToken } = req.cookies;
-    console.log("cookie auth token", authToken);
-    if (!authToken) {
+    // Extract token from Authorization header
+    const authHeader = req.headers.authorization;
+    console.log("authHeader", authHeader);
+    if (!authHeader) {
       return res.status(401).json({
-        success: true,
-        authToken: authToken,
-        message: "Sign in to continue",
+        success: false,
+        message: "Authorization header missing",
       });
     }
+
+    // Check if it starts with 'Bearer '
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+
+    // Extract the actual token (remove 'Bearer ' prefix)
+    const authToken = authHeader.substring(7); // 'Bearer '.length = 7
+
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Token not provided",
+      });
+    }
+
     if (!process.env.JWT_SECRET_KEY) {
       return res.status(500).json({
         success: false,
