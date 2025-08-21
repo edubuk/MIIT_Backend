@@ -3,15 +3,33 @@ import JWT from "jsonwebtoken";
 import { Result } from "../model/result.model.js";
 import { registration } from "../model/userModel.js";
 import { getAiCareerRecommendations, getCareerPath } from "../index.js";
+import Payment from "../model/paymentModel.js";
 
 export const getQuestionsStage1 = async (req, res) => {
   try {
-    const { authToken } = req.cookies;
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Authorization header missing",
+      });
+    }
+
+    // Check if it starts with 'Bearer '
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+
+    // Extract the actual token (remove 'Bearer ' prefix)
+    const authToken = authHeader.substring(7); // 'Bearer '.length = 7
 
     if (!authToken) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized request, sign in to continue",
+        message: "Token not provided",
       });
     }
 
@@ -30,6 +48,15 @@ export const getQuestionsStage1 = async (req, res) => {
         success: false,
         message: "Student ID is required for question shuffling",
       });
+    }
+    const user = await registration.findById(userId);
+    if (!user) {
+      return res.status(403).json("No user found!");
+    }
+    // now check whether users email id is present in the payment collections
+    const payment = await Payment.findOne({ emailId: user.email });
+    if (!payment) {
+      return res.status(404).json("No payment record found");
     }
 
     const response = await axios.get(process.env.SHEET_TEST_STAGE_1);
@@ -101,14 +128,30 @@ function shuffleWithStudentId(array, studentId) {
 
 export const getQuestionsStage2 = async (req, res) => {
   try {
-    // Get student identifier from request (could be from params, query, or body)
+    const authHeader = req.headers.authorization;
 
-    const { authToken } = req.cookies;
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Authorization header missing",
+      });
+    }
+
+    // Check if it starts with 'Bearer '
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+
+    // Extract the actual token (remove 'Bearer ' prefix)
+    const authToken = authHeader.substring(7); // 'Bearer '.length = 7
 
     if (!authToken) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized request, sign in to continue",
+        message: "Token not provided",
       });
     }
 
@@ -127,6 +170,15 @@ export const getQuestionsStage2 = async (req, res) => {
         success: false,
         message: "Student ID is required for question shuffling",
       });
+    }
+    const user = await registration.findById(userId);
+    if (!user) {
+      return res.status(403).json("No user found!");
+    }
+    // now check whether users email id is present in the payment collections
+    const payment = await Payment.findOne({ emailId: user.email });
+    if (!payment) {
+      return res.status(404).json("No payment record found");
     }
 
     const response = await axios.get(process.env.SHEET_TEST_STAGE_2);
@@ -178,12 +230,30 @@ export const getQuestionsStage2 = async (req, res) => {
 
 export const getQuestionsStage3 = async (req, res) => {
   try {
-    const { authToken } = req.cookies;
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Authorization header missing",
+      });
+    }
+
+    // Check if it starts with 'Bearer '
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+
+    // Extract the actual token (remove 'Bearer ' prefix)
+    const authToken = authHeader.substring(7); // 'Bearer '.length = 7
 
     if (!authToken) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized request, sign in to continue",
+        message: "Token not provided",
       });
     }
 
@@ -202,6 +272,15 @@ export const getQuestionsStage3 = async (req, res) => {
         success: false,
         message: "Student ID is required for question shuffling",
       });
+    }
+    const user = await registration.findById(userId);
+    if (!user) {
+      return res.status(403).json("No user found!");
+    }
+    // now check whether users email id is present in the payment collections
+    const payment = await Payment.findOne({ emailId: user.email });
+    if (!payment) {
+      return res.status(404).json("No payment record found");
     }
     const response = await axios.get(process.env.SHEET_TEST_STAGE_3);
     const rawData = response.data;
@@ -356,18 +435,27 @@ const getTop3Intelligences = (intelligenceScores) => {
 export const evaluateAnswer = async (req, res) => {
   try {
     const { userAnswers, stage } = req.body;
-    const { authToken } = req.cookies;
-
+    const authHeader = req.headers.authorization;
     if (!process.env.JWT_SECRET_KEY) {
       return res.status(500).json({
         success: false,
         message: "JWT SECRET KEY NOT FOUND",
       });
     }
+    if (!authHeader) {
+      return res.status(401).json("Unauthorized request , sign in to continue");
+    }
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+    const authToken = authHeader.substring(7);
     if (!authToken) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized request , sign in to continue",
+        message: "Token not provided",
       });
     }
     const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
@@ -466,13 +554,13 @@ export const evaluateAnswer = async (req, res) => {
 };
 
 export const getInterestTestQuestions = async (req, res) => {
+  if (!process.env.SHEET_INTEREST_TEST) {
+    return res.status(500).json({
+      success: false,
+      message: "NO ENV FOUND FOR INTEREST TEST SHEET",
+    });
+  }
   try {
-    if (!process.env.SHEET_INTEREST_TEST) {
-      return res.status(500).json({
-        success: false,
-        message: "NO ENV FOUND FOR INTEREST TEST SHEET",
-      });
-    }
     const response = await axios.get(process.env.SHEET_INTEREST_TEST);
     const rawData = response.data;
 
@@ -550,7 +638,20 @@ export const evaluateAnswerForInterestTest = async (req, res) => {
   try {
     const { userAnswers } = req.body;
     const { result_id } = req.params;
-    const { authToken } = req.cookies;
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Authorization header missing",
+      });
+    }
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+    const authToken = authHeader.substring(7); // 'Bearer '.length = 7
 
     if (!process.env.JWT_SECRET_KEY) {
       return res.status(500).json({
@@ -700,14 +801,27 @@ export const getFinalResult = async (req, res) => {
   }
   try {
     const { result_id } = req.params;
-    const { authToken } = req.cookies;
-
-    if (!authToken) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized request , sign in to continue",
       });
     }
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authorization format. Expected 'Bearer <token>'",
+      });
+    }
+    const authToken = authHeader.substring(7);
+    if (!authToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Token not provided",
+      });
+    }
+
     const decodedToken = JWT.verify(authToken, process.env.JWT_SECRET_KEY);
     const userId = decodedToken._id;
     const user = await registration.findById(userId);
